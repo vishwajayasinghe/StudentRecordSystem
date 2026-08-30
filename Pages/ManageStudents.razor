@@ -1,0 +1,192 @@
+@page "/manage"
+@using System.ComponentModel.DataAnnotations
+@inject StudentService Students
+@inject CourseService Courses
+@inject AuthService Auth
+@inject AuditLogService AuditLog
+@inject NavigationManager Nav
+
+<PageTitle>Manage Students — Folio</PageTitle>
+
+@if (Auth.Role != "Admin")
+{
+    <div class="alert-box">
+        <p>You must be logged in as an Administrator to access this page.</p>
+        <button class="btn-primary" @onclick='() => Nav.NavigateTo("/login")'>Go to Login</button>
+    </div>
+}
+else
+{
+    <h1>Manage Students</h1>
+    <p class="page-subtitle">Add new students or edit existing personal, course, and status details.</p>
+
+    <div class="card">
+        <h2>@(editingId is null ? "Add New Student" : $"Editing Student #{editingId}")</h2>
+        <EditForm Model="@formModel" OnValidSubmit="HandleSubmit">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+            <div class="form-grid">
+                <label>Full Name <InputText @bind-Value="formModel.Name" /></label>
+                <label>Date of Birth <InputDate @bind-Value="formModel.DateOfBirth" /></label>
+                <label>
+                    Gender
+                    <InputSelect @bind-Value="formModel.Gender">
+                        <option value="">Select...</option>
+                        <option value="Female">Female</option>
+                        <option value="Male">Male</option>
+                        <option value="Other">Other</option>
+                        <option value="Prefer not to say">Prefer not to say</option>
+                    </InputSelect>
+                </label>
+                <label>Email <InputText @bind-Value="formModel.Email" /></label>
+                <label>Phone <InputText @bind-Value="formModel.Phone" /></label>
+                <label>Address <InputText @bind-Value="formModel.Address" /></label>
+                <label>Emergency Contact <InputText @bind-Value="formModel.EmergencyContact" /></label>
+                <label>
+                    Course
+                    <InputSelect @bind-Value="formModel.CourseCode">
+                        <option value="">Select...</option>
+                        @foreach (Course c in Courses.GetAll())
+                        {
+                            <option value="@c.Code">@c.Name</option>
+                        }
+                    </InputSelect>
+                </label>
+                <label>
+                    Status
+                    <InputSelect @bind-Value="formModel.Status">
+                        @foreach (StudentStatus status in Enum.GetValues<StudentStatus>())
+                        {
+                            <option value="@status">@status</option>
+                        }
+                    </InputSelect>
+                </label>
+            </div>
+            <button class="btn-primary" type="submit">@(editingId is null ? "Add Student" : "Save Changes")</button>
+            @if (editingId is not null)
+            {
+                <button class="btn-secondary" type="button" @onclick="CancelEdit">Cancel</button>
+            }
+        </EditForm>
+    </div>
+
+    <div class="card">
+        <h2>All Students</h2>
+        <table class="data-table">
+            <thead><tr><th>ID</th><th>Name</th><th>Course</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+                @foreach (Student s in Students.GetAll())
+                {
+                    <tr>
+                        <td>@s.Id</td>
+                        <td>@s.Name</td>
+                        <td>@GetCourseName(s.CourseCode)</td>
+                        <td>@s.Status</td>
+                        <td>
+                            <button class="btn-small" @onclick="() => StartEdit(s)">Edit</button>
+                            <a class="btn-small" href="@($"manage-results/{s.Id}")">Results</a>
+                            <button class="btn-small btn-danger" @onclick="() => Delete(s.Id)">Delete</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private int? editingId;
+    private StudentFormModel formModel = new();
+
+    private string GetCourseName(string code)
+    {
+        Course? course = Courses.GetByCode(code);
+        return course?.Name ?? code;
+    }
+
+    private void StartEdit(Student s)
+    {
+        editingId = s.Id;
+        formModel = new StudentFormModel
+        {
+            Name = s.Name,
+            DateOfBirth = s.DateOfBirth,
+            Gender = s.Gender,
+            Email = s.Email,
+            Phone = s.Phone,
+            Address = s.Address,
+            EmergencyContact = s.EmergencyContact,
+            CourseCode = s.CourseCode,
+            Status = s.Status
+        };
+    }
+
+    private void CancelEdit()
+    {
+        editingId = null;
+        formModel = new StudentFormModel();
+    }
+
+    private void HandleSubmit()
+    {
+        if (editingId is null)
+        {
+            var student = new Student
+            {
+                Name = formModel.Name,
+                DateOfBirth = formModel.DateOfBirth,
+                Gender = formModel.Gender,
+                Email = formModel.Email,
+                Phone = formModel.Phone,
+                Address = formModel.Address,
+                EmergencyContact = formModel.EmergencyContact,
+                CourseCode = formModel.CourseCode,
+                Status = formModel.Status
+            };
+            Students.Add(student);
+            AuditLog.Log($"Admin added new student: {student.Name}");
+        }
+        else
+        {
+            Students.UpdateProfile(editingId.Value, formModel.Name, formModel.DateOfBirth, formModel.Gender,
+                formModel.Email, formModel.Phone, formModel.Address, formModel.EmergencyContact,
+                formModel.CourseCode, formModel.Status);
+            AuditLog.Log($"Admin updated student #{editingId}: {formModel.Name}");
+        }
+
+        CancelEdit();
+    }
+
+    private void Delete(int id)
+    {
+        Students.Remove(id);
+        AuditLog.Log($"Admin deleted student #{id}");
+        if (editingId == id)
+        {
+            CancelEdit();
+        }
+    }
+
+    private class StudentFormModel
+    {
+        [Required(ErrorMessage = "Name is required")]
+        public string Name { get; set; } = "";
+
+        public DateTime? DateOfBirth { get; set; }
+
+        public string Gender { get; set; } = "";
+
+        [Required(ErrorMessage = "Email is required")]
+        [EmailAddress(ErrorMessage = "Enter a valid email address")]
+        public string Email { get; set; } = "";
+
+        public string Phone { get; set; } = "";
+        public string Address { get; set; } = "";
+        public string EmergencyContact { get; set; } = "";
+
+        [Required(ErrorMessage = "Course is required")]
+        public string CourseCode { get; set; } = "";
+
+        public StudentStatus Status { get; set; } = StudentStatus.Active;
+    }
+}

@@ -1,0 +1,17 @@
+# .NET build output
+bin/
+obj/
+
+# VS Code
+.vscode/
+
+# Visual Studio
+.vs/
+*.user
+
+# Saved application data (don't commit test data)
+Data/students.json
+
+# OS files
+.DS_Store
+Thumbs.db

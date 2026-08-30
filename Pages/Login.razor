@@ -1,0 +1,92 @@
+@page "/login"
+@layout BlankLayout
+@inject AuthService Auth
+@inject NavigationManager Nav
+@inject AuditLogService AuditLog
+
+<PageTitle>Sign In — Folio</PageTitle>
+
+<div class="auth-shell">
+    <div class="auth-brand-panel">
+        <div class="auth-mark">F</div>
+        <h1 class="auth-wordmark">Folio</h1>
+        <p class="auth-tagline">Academic Records Registry</p>
+        <div class="auth-rule"></div>
+        <p class="auth-quote">Every unit, every mark, every term — kept in order.</p>
+    </div>
+
+    <div class="auth-form-panel">
+        <div class="auth-form-card">
+            <span class="auth-eyebrow">Student Access</span>
+            <h2>View your record</h2>
+            <p class="hint-text">Enter your Student ID. (Try 102345762 with the sample data.)</p>
+            <div class="auth-field">
+                <label>Student ID</label>
+                <input type="number" class="auth-input" @bind="studentIdInput" />
+            </div>
+            <button class="btn-primary" @onclick="HandleStudentLogin">Continue</button>
+            @if (!string.IsNullOrEmpty(studentMessage))
+            {
+                <p class="form-message">@studentMessage</p>
+            }
+        </div>
+
+        <div class="auth-divider">or</div>
+
+        <div class="auth-form-card">
+            <span class="auth-eyebrow">Administrator Access</span>
+            <h2>Manage records</h2>
+            <p class="hint-text">Demo credentials: <code>admin</code> / <code>admin123</code></p>
+            <div class="auth-field">
+                <label>Username</label>
+                <input class="auth-input" @bind="adminUsername" />
+            </div>
+            <div class="auth-field">
+                <label>Password</label>
+                <input type="password" class="auth-input" @bind="adminPassword" />
+            </div>
+            <button class="btn-primary" @onclick="HandleAdminLogin" disabled="@Auth.IsLockedOut">Sign In</button>
+            @if (!string.IsNullOrEmpty(adminMessage))
+            {
+                <p class="form-message">@adminMessage</p>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private int studentIdInput;
+    private string studentMessage = "";
+
+    private string adminUsername = "";
+    private string adminPassword = "";
+    private string adminMessage = "";
+
+    private void HandleStudentLogin()
+    {
+        (bool success, string message) = Auth.LoginAsStudent(studentIdInput);
+        studentMessage = message;
+
+        if (success)
+        {
+            AuditLog.Log($"Student login: ID {studentIdInput}");
+            Nav.NavigateTo("/");
+        }
+    }
+
+    private void HandleAdminLogin()
+    {
+        (bool success, string message) = Auth.LoginAsAdmin(adminUsername, adminPassword);
+        adminMessage = message;
+
+        if (success)
+        {
+            AuditLog.Log("Admin login successful");
+            Nav.NavigateTo("/");
+        }
+        else
+        {
+            AuditLog.Log($"Failed admin login attempt (username: {adminUsername})");
+        }
+    }
+}

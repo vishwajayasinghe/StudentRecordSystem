@@ -1,0 +1,163 @@
+@page "/"
+@inject StudentService Students
+@inject CourseService Courses
+@inject AuthService Auth
+@inject NavigationManager Nav
+
+<PageTitle>Dashboard — Folio</PageTitle>
+
+@if (Auth.Role == "None")
+{
+    <h1>Welcome</h1>
+    <p class="page-subtitle">Please log in to continue.</p>
+    <button class="btn-primary" @onclick='() => Nav.NavigateTo("/login")'>Go to Login</button>
+}
+else if (Auth.Role == "Student" && Auth.CurrentStudent is not null)
+{
+    Student s = Auth.CurrentStudent!;
+    <h1>Student Dashboard</h1>
+
+    <div class="dashboard-card">
+        <div class="dashboard-header">
+            <div>
+                <h2>@s.Name</h2>
+                <p class="hint-text">Student ID: @s.Id | Course: @GetCourseName(s.CourseCode)</p>
+            </div>
+            <span class="status-badge status-@s.Status.ToString().ToLower()">@s.Status</span>
+        </div>
+
+        <div class="stat-grid">
+            <div class="stat-box"><span class="stat-label">WAM</span><span class="stat-value">@s.CalculateWAM().ToString("F2")</span></div>
+            <div class="stat-box"><span class="stat-label">GPA</span><span class="stat-value">@s.CalculateGPA().ToString("F2")</span></div>
+            <div class="stat-box"><span class="stat-label">Credit Points</span><span class="stat-value">@s.TotalCreditPointsCompleted</span></div>
+            <div class="stat-box"><span class="stat-label">Units Completed</span><span class="stat-value">@s.CompletedUnits.Count</span></div>
+        </div>
+
+        <h3>Current Units</h3>
+        @if (s.CurrentUnits.Count == 0)
+        {
+            <p class="empty-state">No current unit enrolments.</p>
+        }
+        else
+        {
+            <table class="data-table">
+                <thead><tr><th>Code</th><th>Unit</th><th>Credit Points</th></tr></thead>
+                <tbody>
+                    @foreach (UnitRecord u in s.CurrentUnits)
+                    {
+                        <tr><td>@u.UnitCode</td><td>@u.UnitName</td><td>@u.CreditPoints</td></tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+        <h3>Recent Results</h3>
+        @if (s.CompletedUnits.Count == 0)
+        {
+            <p class="empty-state">No results recorded yet.</p>
+        }
+        else
+        {
+            <table class="data-table">
+                <thead><tr><th>Code</th><th>Unit</th><th>Mark</th><th>Grade</th></tr></thead>
+                <tbody>
+                    @foreach (UnitRecord u in s.CompletedUnits.OrderByDescending(u => u.Semester))
+                    {
+                        <tr><td>@u.UnitCode</td><td>@u.UnitName</td><td>@u.Mark?.ToString("F1")</td><td>@u.Grade</td></tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+        <a class="btn-secondary" href="@($"transcript/{s.Id}")">View Full Transcript</a>
+    </div>
+}
+else if (Auth.Role == "Admin")
+{
+    <h1>All Students</h1>
+    <p class="page-subtitle">Search and filter student records.</p>
+
+    <div class="toolbar">
+        <input class="search-box" placeholder="Search by name..." @bind="nameTerm" @bind:event="oninput" />
+        <select class="filter-select" @bind="courseFilter">
+            <option value="">All courses</option>
+            @foreach (Course c in Courses.GetAll())
+            {
+                <option value="@c.Code">@c.Name</option>
+            }
+        </select>
+        <select class="filter-select" @bind="statusFilter">
+            <option value="">All statuses</option>
+            @foreach (StudentStatus status in Enum.GetValues<StudentStatus>())
+            {
+                <option value="@status">@status</option>
+            }
+        </select>
+    </div>
+
+    @if (GetFilteredResults().Count == 0)
+    {
+        <p class="empty-state">No students match your search.</p>
+    }
+    else
+    {
+        <div class="card-grid">
+            <div class="card">
+                <h2>Student Records (@GetFilteredResults().Count)</h2>
+                <table class="data-table">
+                    <thead>
+                        <tr><th>ID</th><th>Name</th><th>Course</th><th>Status</th><th>WAM</th><th>GPA</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (Student s in GetFilteredResults())
+                        {
+                            <tr>
+                                <td>@s.Id</td>
+                                <td>@s.Name</td>
+                                <td>@GetCourseName(s.CourseCode)</td>
+                                <td><span class="status-badge status-@s.Status.ToString().ToLower()">@s.Status</span></td>
+                                <td>@s.CalculateWAM().ToString("F1")</td>
+                                <td>@s.CalculateGPA().ToString("F1")</td>
+                                <td><a class="btn-small" href="@($"transcript/{s.Id}")">Transcript</a></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="card">
+                <h2>WAM Comparison</h2>
+                <div class="bar-chart">
+                    @foreach (Student s in GetFilteredResults())
+                    {
+                        <div class="bar-row">
+                            <span class="bar-label">@s.Name</span>
+                            <div class="bar-track">
+                                <div class="bar-fill" style="width:@(Math.Min(s.CalculateWAM(), 100).ToString("F1"))%"></div>
+                            </div>
+                            <span class="bar-value">@s.CalculateWAM().ToString("F1")</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private string nameTerm = "";
+    private string courseFilter = "";
+    private string statusFilter = "";
+
+    private string GetCourseName(string code)
+    {
+        Course? course = Courses.GetByCode(code);
+        return course?.Name ?? code;
+    }
+
+    private List<Student> GetFilteredResults()
+    {
+        StudentStatus? statusValue = string.IsNullOrEmpty(statusFilter) ? null : Enum.Parse<StudentStatus>(statusFilter);
+        return Students.Search(nameTerm, string.IsNullOrEmpty(courseFilter) ? null : courseFilter, statusValue);
+    }
+}

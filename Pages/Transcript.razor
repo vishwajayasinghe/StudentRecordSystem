@@ -1,0 +1,124 @@
+@page "/transcript/{StudentId:int}"
+@inject StudentService Students
+@inject CourseService Courses
+@inject AuthService Auth
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Transcript — Folio</PageTitle>
+
+@if (Auth.Role == "None")
+{
+    <div class="alert-box">
+        <p>Please log in to view a transcript.</p>
+        <button class="btn-primary" @onclick='() => Nav.NavigateTo("/login")'>Go to Login</button>
+    </div>
+}
+else if (!CanView())
+{
+    <div class="alert-box">
+        <p>You do not have permission to view this transcript.</p>
+    </div>
+}
+else if (student is null)
+{
+    <p class="empty-state">Student not found.</p>
+}
+else
+{
+    <h1>Academic Transcript</h1>
+
+    <div class="dashboard-card">
+        <div class="dashboard-header">
+            <div>
+                <h2>@student.Name</h2>
+                <p class="hint-text">Student ID: @student.Id | Course: @GetCourseName(student.CourseCode)</p>
+            </div>
+            <span class="status-badge status-@student.Status.ToString().ToLower()">@student.Status</span>
+        </div>
+
+        <div class="stat-grid">
+            <div class="stat-box"><span class="stat-label">Overall WAM</span><span class="stat-value">@student.CalculateWAM().ToString("F2")</span></div>
+            <div class="stat-box"><span class="stat-label">Overall GPA</span><span class="stat-value">@student.CalculateGPA().ToString("F2")</span></div>
+            <div class="stat-box"><span class="stat-label">Credit Points</span><span class="stat-value">@student.TotalCreditPointsCompleted</span></div>
+            <div class="stat-box"><span class="stat-label">Units Completed</span><span class="stat-value">@student.CompletedUnits.Count</span></div>
+        </div>
+
+        <h3>Completed Units</h3>
+        @if (student.CompletedUnits.Count == 0)
+        {
+            <p class="empty-state">No completed units yet.</p>
+        }
+        else
+        {
+            <table class="data-table">
+                <thead><tr><th>Semester</th><th>Code</th><th>Unit</th><th>Credit Points</th><th>Mark</th><th>Grade</th></tr></thead>
+                <tbody>
+                    @foreach (UnitRecord u in student.CompletedUnits.OrderBy(u => u.Semester))
+                    {
+                        <tr>
+                            <td>@u.Semester</td>
+                            <td>@u.UnitCode</td>
+                            <td>@u.UnitName</td>
+                            <td>@u.CreditPoints</td>
+                            <td>@u.Mark?.ToString("F1")</td>
+                            <td>@u.Grade</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+        <h3>Current Enrolment</h3>
+        @if (student.CurrentUnits.Count == 0)
+        {
+            <p class="empty-state">No current unit enrolments.</p>
+        }
+        else
+        {
+            <table class="data-table">
+                <thead><tr><th>Semester</th><th>Code</th><th>Unit</th><th>Credit Points</th></tr></thead>
+                <tbody>
+                    @foreach (UnitRecord u in student.CurrentUnits)
+                    {
+                        <tr><td>@u.Semester</td><td>@u.UnitCode</td><td>@u.UnitName</td><td>@u.CreditPoints</td></tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+
+    <button class="btn-secondary" @onclick="Print">Print / Export Transcript</button>
+}
+
+@code {
+    [Parameter] public int StudentId { get; set; }
+
+    private Student? student;
+
+    protected override void OnParametersSet()
+    {
+        student = Students.GetById(StudentId);
+    }
+
+    private bool CanView()
+    {
+        if (Auth.Role == "Admin")
+        {
+            return true;
+        }
+
+        return Auth.Role == "Student" && Auth.CurrentStudent?.Id == StudentId;
+    }
+
+    private string GetCourseName(string code)
+    {
+        Course? course = Courses.GetByCode(code);
+        return course?.Name ?? code;
+    }
+
+    private async Task Print()
+    {
+        await JS.InvokeVoidAsync("print");
+    }
+}

@@ -1,0 +1,146 @@
+@page "/manage-results/{StudentId:int}"
+@inject StudentService Students
+@inject AuthService Auth
+@inject AuditLogService AuditLog
+@inject NavigationManager Nav
+
+<PageTitle>Manage Results — Folio</PageTitle>
+
+@if (Auth.Role != "Admin")
+{
+    <div class="alert-box">
+        <p>You must be logged in as an Administrator to access this page.</p>
+        <button class="btn-primary" @onclick='() => Nav.NavigateTo("/login")'>Go to Login</button>
+    </div>
+}
+else if (student is null)
+{
+    <p class="empty-state">Student not found.</p>
+}
+else
+{
+    <h1>Manage Results — @student.Name</h1>
+    <p class="page-subtitle">Add or update a unit enrolment/result. Leave Mark blank if the student is currently enrolled but not yet graded.</p>
+
+    <div class="card">
+        <h2>Add / Update Unit Record</h2>
+        <div class="form-grid">
+            <label>Unit Code <input @bind="formUnitCode" placeholder="CSP3341" /></label>
+            <label>Unit Name <input @bind="formUnitName" placeholder="Programming Languages and Paradigms" /></label>
+            <label>Semester <input @bind="formSemester" placeholder="2026 Semester 2" /></label>
+            <label>Credit Points <input type="number" @bind="formCreditPoints" /></label>
+            <label>
+                Mark (leave blank if currently enrolled)
+                <input type="number" step="0.1" @bind="formMarkInput" />
+            </label>
+        </div>
+        <button class="btn-primary" @onclick="HandleSubmit">Save Unit Record</button>
+        @if (!string.IsNullOrEmpty(formMessage))
+        {
+            <p class="form-message">@formMessage</p>
+        }
+    </div>
+
+    <div class="card">
+        <h2>Current Unit Records</h2>
+        <table class="data-table">
+            <thead>
+                <tr><th>Code</th><th>Unit</th><th>Semester</th><th>Credit Points</th><th>Mark</th><th>Grade</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (UnitRecord u in student.UnitRecords.OrderByDescending(u => u.Semester))
+                {
+                    <tr>
+                        <td>@u.UnitCode</td>
+                        <td>@u.UnitName</td>
+                        <td>@u.Semester</td>
+                        <td>@u.CreditPoints</td>
+                        <td>@(u.Mark.HasValue ? u.Mark.Value.ToString("F1") : "-")</td>
+                        <td>@u.Grade</td>
+                        <td><button class="btn-small btn-danger" @onclick="() => RemoveRecord(u.UnitCode, u.Semester)">Remove</button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <a class="btn-secondary" href="/manage">Back to Manage Students</a>
+}
+
+@code {
+    [Parameter] public int StudentId { get; set; }
+
+    private Student? student;
+
+    private string formUnitCode = "";
+    private string formUnitName = "";
+    private string formSemester = "";
+    private int formCreditPoints = 15;
+    private string formMarkInput = "";
+    private string formMessage = "";
+
+    protected override void OnParametersSet()
+    {
+        student = Students.GetById(StudentId);
+    }
+
+    private void HandleSubmit()
+    {
+        if (student is null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(formUnitCode) || string.IsNullOrWhiteSpace(formSemester))
+        {
+            formMessage = "Unit code and semester are required.";
+            return;
+        }
+
+        double? mark = null;
+        if (!string.IsNullOrWhiteSpace(formMarkInput))
+        {
+            if (double.TryParse(formMarkInput, out double parsedMark))
+            {
+                mark = parsedMark;
+            }
+            else
+            {
+                formMessage = "Mark must be a number.";
+                return;
+            }
+        }
+
+        var record = new UnitRecord
+        {
+            UnitCode = formUnitCode,
+            UnitName = formUnitName,
+            Semester = formSemester,
+            CreditPoints = formCreditPoints,
+            Mark = mark
+        };
+
+        Students.AddOrUpdateUnitRecord(StudentId, record);
+        AuditLog.Log($"Admin updated result for {student.Name}: {record.UnitCode} ({record.Semester})");
+
+        student = Students.GetById(StudentId);
+        formUnitCode = "";
+        formUnitName = "";
+        formSemester = "";
+        formCreditPoints = 15;
+        formMarkInput = "";
+        formMessage = "Saved.";
+    }
+
+    private void RemoveRecord(string unitCode, string semester)
+    {
+        if (student is null)
+        {
+            return;
+        }
+
+        Students.RemoveUnitRecord(StudentId, unitCode, semester);
+        AuditLog.Log($"Admin removed result for {student.Name}: {unitCode} ({semester})");
+        student = Students.GetById(StudentId);
+    }
+}

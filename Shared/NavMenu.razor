@@ -1,0 +1,50 @@
+@inject AuthService Auth
+@inject NavigationManager Nav
+
+<div class="sidebar">
+    <div class="sidebar-brand">
+        <span class="brand-mark">F</span>
+        <div>
+            <span class="brand-text">Folio</span>
+            <span class="brand-subtext">Academic Records Registry</span>
+        </div>
+    </div>
+
+    <nav class="nav-links">
+        <NavLink class="nav-item" href="" Match="NavLinkMatch.All">Dashboard</NavLink>
+
+        @if (Auth.Role == "Admin")
+        {
+            <NavLink class="nav-item" href="manage">Manage Students</NavLink>
+        }
+
+        @if (Auth.Role == "None")
+        {
+            <NavLink class="nav-item" href="login">Login</NavLink>
+        }
+    </nav>
+
+    <div class="sidebar-footer">
+        @if (Auth.Role == "None")
+        {
+            <span>Not logged in</span>
+        }
+        else
+        {
+            <div>Signed in as <strong>@Auth.Role</strong></div>
+            @if (Auth.Role == "Student" && Auth.CurrentStudent is not null)
+            {
+                <div class="hint-text-light">@Auth.CurrentStudent.Name</div>
+            }
+            <button class="btn-logout" @onclick="HandleLogout">Logout</button>
+        }
+    </div>
+</div>
+
+@code {
+    private void HandleLogout()
+    {
+        Auth.Logout();
+        Nav.NavigateTo("/login");
+    }
+}
